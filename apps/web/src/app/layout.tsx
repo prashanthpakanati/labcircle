@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description: "Connected diagnostic and laboratory management platform.",
 };
 
-import { AuthProvider } from "@/components/providers/auth-provider";
+import { AuthProvider } from "@/lib/auth/providers/auth-provider";
 
 export default function RootLayout({
   children,

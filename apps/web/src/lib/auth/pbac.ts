@@ -3,7 +3,6 @@ import { Permission } from "./permissions";
 
 export interface UserAuthDetails {
   role: string | null;
-  [key: string]: unknown; // Allow extensibility of user fields
 }
 
 // Role-to-Permission Mapping
