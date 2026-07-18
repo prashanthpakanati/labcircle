@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Connected diagnostic and laboratory management platform.",
 };
 
+import { AuthProvider } from "@/components/providers/auth-provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -24,7 +26,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${outfit.variable} ${inter.variable} antialiased`}>
-      <body className="bg-background text-foreground min-h-screen font-sans">{children}</body>
+      <body className="bg-background text-foreground min-h-screen font-sans">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
