@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Default deny-all policy
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Reports folder: patient can read, authorized lab staff can write
+    match /reports/{patientId}/{reportFile} {
+      allow read: if isAuthenticated() && request.auth.uid == patientId;
+      allow write: if isAuthenticated() && (
+        request.auth.token.role == 'lab_technician' ||
+        request.auth.token.role == 'admin'
+      );
+    }
+  }
+}

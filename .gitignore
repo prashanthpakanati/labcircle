@@ -1,0 +1,78 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# PNPM
+.pnpm-store/
+pnpm-lock.yaml
+
+# Build and Output directories
+dist/
+build/
+.next/
+out/
+.docusaurus/
+.cache/
+.serverless/
+.fusebox/
+.dynamodb/
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.cproject
+.settings/
+
+# OS-specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Firebase cache and logs
+.firebase/
+firebase-debug.log
+ui-debug.log
+firestore-debug.log
+pubsub-debug.log
+database-debug.log
+storage-debug.log
+functions-debug.log
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing and coverage
+coverage/
+.nyc_output/
+.playwright/
+playwright-report/
+test-results/
+
+# Temporary files
+tmp/
+temp/

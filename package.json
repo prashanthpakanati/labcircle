@@ -1,0 +1,26 @@
+{
+  "name": "labcircle-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for LabCircle - A healthcare platform connecting diagnostic labs, clinic management, and patient care.",
+  "scripts": {
+    "dev": "pnpm --filter \"*\" --parallel dev",
+    "build": "pnpm --filter \"*\" build",
+    "lint": "pnpm --filter \"*\" lint",
+    "test": "pnpm --filter \"*\" test",
+    "firebase:dev": "firebase emulators:start --config firebase/firebase.json",
+    "firebase:deploy": "firebase deploy --config firebase/firebase.json"
+  },
+  "keywords": [
+    "healthcare",
+    "monorepo",
+    "laboratory",
+    "diagnostics",
+    "pnpm"
+  ],
+  "author": "LabCircle Engineering",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
