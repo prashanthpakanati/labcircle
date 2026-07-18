@@ -1,7 +1,7 @@
 import { User } from "firebase/auth";
 import { Timestamp, FieldValue } from "firebase/firestore";
-import { Role } from "../roles";
-import { Permission } from "../permissions";
+import { Role } from "@/lib/permissions/roles";
+import { Permission } from "@/lib/permissions/permissions";
 
 export interface AuthenticatedUser {
   uid: string;

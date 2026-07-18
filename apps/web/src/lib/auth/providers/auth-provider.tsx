@@ -5,8 +5,8 @@ import { onAuthStateChanged, getIdTokenResult } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { AuthenticatedUser } from "../types";
-import { Role } from "../roles";
-import { ROLE_PERMISSIONS } from "../pbac";
+import { Role } from "@/lib/permissions/roles";
+import { ROLE_PERMISSIONS } from "@/lib/permissions/pbac";
 
 interface AuthContextType {
   user: AuthenticatedUser | null;

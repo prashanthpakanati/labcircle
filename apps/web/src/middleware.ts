@@ -6,7 +6,8 @@ import {
   isAdminRoute,
   isLabRoute,
   isSuperAdminRoute,
-} from "./lib/auth/utils/routes";
+} from "./lib/routing/middleware-utils";
+import { REDIRECTS } from "./lib/routing/redirects";
 
 // Decodes JWT token payload from client cookies without cryptographic overhead
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -40,14 +41,14 @@ export function middleware(request: NextRequest) {
   // 1. Authenticated users attempting to view Guest Pages (Login panels)
   if (isAuthenticated && isGuestRoute(pathname)) {
     // Redirect patients to home, and admin/clinical staff to dashboard
-    const destination = userRole === "patient" ? "/" : "/dashboard";
+    const destination = userRole === "patient" ? REDIRECTS.DEFAULT_PATIENT_HOME : REDIRECTS.DEFAULT_STAFF_DASHBOARD;
     return NextResponse.redirect(new URL(destination, request.url));
   }
 
   // 2. Unauthenticated users attempting to view Protected Pages
   if (!isAuthenticated && isProtectedRoute(pathname)) {
     // Redirect to patient login portal, retaining original request url
-    const loginUrl = new URL("/login/patient", request.url);
+    const loginUrl = new URL(REDIRECTS.UNAUTHENTICATED, request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -56,7 +57,7 @@ export function middleware(request: NextRequest) {
   if (isAuthenticated && isProtectedRoute(pathname)) {
     // Admin dashboard guards
     if (isAdminRoute(pathname) && userRole !== "admin" && userRole !== "super_admin") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
+      return NextResponse.redirect(new URL(REDIRECTS.UNAUTHORIZED, request.url));
     }
 
     // Laboratory desk guards
@@ -67,12 +68,12 @@ export function middleware(request: NextRequest) {
       userRole !== "admin" &&
       userRole !== "super_admin"
     ) {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
+      return NextResponse.redirect(new URL(REDIRECTS.UNAUTHORIZED, request.url));
     }
 
     // Super Admin system panel guards
     if (isSuperAdminRoute(pathname) && userRole !== "super_admin") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
+      return NextResponse.redirect(new URL(REDIRECTS.UNAUTHORIZED, request.url));
     }
   }
 

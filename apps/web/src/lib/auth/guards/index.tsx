@@ -2,9 +2,9 @@
 
 import React from "react";
 import { useAuth } from "../hooks";
-import { can } from "../pbac";
-import { Role } from "../roles";
-import { Permission } from "../permissions";
+import { can } from "@/lib/permissions/pbac";
+import { Role } from "@/lib/permissions/roles";
+import { Permission } from "@/lib/permissions/permissions";
 import { Spinner } from "@/components/ui/loading";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";

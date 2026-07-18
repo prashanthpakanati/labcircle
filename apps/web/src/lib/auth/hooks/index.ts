@@ -2,8 +2,8 @@
 
 import { useAuthContext } from "../providers/auth-provider";
 import { AuthenticatedUser } from "../types";
-import { Role } from "../roles";
-import { Permission } from "../permissions";
+import { Role } from "@/lib/permissions/roles";
+import { Permission } from "@/lib/permissions/permissions";
 
 /**
  * Access the core authentication context containing user, loading, and error states.
