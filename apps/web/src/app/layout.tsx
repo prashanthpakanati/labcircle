@@ -24,9 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${outfit.variable} ${inter.variable} antialiased`}>
-      <body className="font-sans min-h-screen bg-background text-foreground">
-        {children}
-      </body>
+      <body className="bg-background text-foreground min-h-screen font-sans">{children}</body>
     </html>
   );
 }
