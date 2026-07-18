@@ -34,6 +34,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (firebaseUser) {
             // Retrieve ID token results containing Custom Claims (RBAC roles)
             const tokenResult = await getIdTokenResult(firebaseUser, true);
+            const token = tokenResult.token;
+            
+            // Set session token in cookie for Next.js Middleware route checks
+            document.cookie = `__session=${token}; path=/; max-age=3600; Secure; SameSite=Lax`;
+
             const role = (tokenResult.claims.role as Role) || "patient";
             const associationId = (tokenResult.claims.associationId as string) || null;
             const permissions = ROLE_PERMISSIONS[role] || [];
@@ -73,6 +78,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               firebaseUser,
             });
           } else {
+            // Clear session token on logout
+            document.cookie = `__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
             setUser(null);
           }
         } catch (err) {
