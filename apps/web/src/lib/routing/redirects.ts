@@ -5,7 +5,7 @@ export const REDIRECTS = {
   UNAUTHENTICATED: ROUTES.LOGIN_PATIENT,
   
   // Destination for access authorization failures (insufficient role permission claims)
-  UNAUTHORIZED: ROUTES.UNAUTHORIZED,
+  UNAUTHORIZED: ROUTES.HOME,
   
   // Standard post-auth target pathways
   DEFAULT_PATIENT_HOME: ROUTES.HOME,

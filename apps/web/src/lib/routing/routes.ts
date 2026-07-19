@@ -24,8 +24,5 @@ export const ROUTES = {
   // Role restricted modules
   ADMIN: "/admin",
   LAB: "/lab",
-  SYSTEM: "/system",
   
-  // Error fallback targets
-  UNAUTHORIZED: "/unauthorized",
 } as const;

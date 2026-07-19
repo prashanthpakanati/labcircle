@@ -1,3 +1,4 @@
+// Updated route groups – added SUPER_ADMIN_ROUTES (currently empty) to satisfy middleware utilities
 import { ROUTES } from "./routes";
 
 export const PUBLIC_ROUTES = [
@@ -23,4 +24,6 @@ export const AUTHENTICATED_ROUTES = [
 
 export const ADMIN_ROUTES = [ROUTES.ADMIN] as const;
 export const LAB_ROUTES = [ROUTES.LAB] as const;
-export const SUPER_ADMIN_ROUTES = [ROUTES.SYSTEM] as const;
+
+// Super admin routes – currently no dedicated paths, but the constant is required by middleware utils.
+export const SUPER_ADMIN_ROUTES = [] as const;
