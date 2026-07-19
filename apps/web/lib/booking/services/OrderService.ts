@@ -67,7 +67,7 @@ export class OrderService {
       if (!snap.exists()) throw new OrderNotFoundError(id);
       const order = snap.data() as Order;
       this.validator.assertTransition(order.status, newStatus);
-      const upd: UpdateData<any> = { status: newStatus, updatedAt: Timestamp.now() };
+      const upd: UpdateData<{ status: OrderStatus; updatedAt: Timestamp }> = { status: newStatus, updatedAt: Timestamp.now() };
       tx.update(orderRef, upd);
     });
   }
