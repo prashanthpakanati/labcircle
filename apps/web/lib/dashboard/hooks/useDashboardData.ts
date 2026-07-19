@@ -1,5 +1,6 @@
 // Hook: useDashboardData
-// Provides dashboard data loading with support for initial load, refresh, retry, and error handling.
+"use client";
+// lib/dashboard/hooks/useDashboardData.ts
 // Ensures no state updates after component unmount and prevents duplicate concurrent requests.
 
 import { useState, useEffect, useRef, useCallback } from "react";

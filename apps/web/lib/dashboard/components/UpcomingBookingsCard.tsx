@@ -28,7 +28,7 @@ export default function UpcomingBookingsCard({ bookings, isLoading = false }: Up
         <ul className="space-y-2">
           {bookings.map((b) => (
             <li key={b.id} className="flex justify-between items-center">
-              <span className="font-medium">{b.title ?? "Appointment"}</span>
+              <span className="font-medium">{b.status ?? "Appointment"}</span>
               <span className="text-sm text-gray-500">
                 {b.scheduledAt.toLocaleDateString()} {b.scheduledAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
