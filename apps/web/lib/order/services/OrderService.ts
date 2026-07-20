@@ -5,6 +5,7 @@ import { ORDER_COLLECTION } from "../models/constants";
 import { Order } from "../models/types";
 import { OrderStatus, PaymentStatus } from "../models/enums";
 import { OrderFormData } from "../models/form";
+import { calculateOrderPricing } from "../utils/calculatePricing";
 
 /**
  * OrderService implements CRUD operations for the Order domain.
@@ -30,13 +31,8 @@ export class OrderService {
     const displayId = `ORD${String(newCount).padStart(6, "0")}`;
     const now = Timestamp.now();
 
-    // Financial calculations
-    const subtotal = form.items.reduce(
-      (sum, item) => sum + item.priceCharged * item.quantity,
-      0
-    );
-    const discount = Math.max(0, form.discount || 0);
-    const total = Math.max(0, subtotal - discount);
+    // Centralized financial calculations
+    const pricing = calculateOrderPricing(form.items, form.discount);
 
     const order: Order = {
       id: orderRef.id,
@@ -46,9 +42,9 @@ export class OrderService {
       paymentStatus: form.paymentStatus ?? PaymentStatus.Unpaid,
       collectionType: form.collectionType,
       items: form.items,
-      subtotal,
-      discount,
-      total,
+      subtotal: pricing.subtotal,
+      discount: pricing.discount,
+      total: pricing.total,
       notes: form.notes ?? "",
       createdAt: now.toDate().toISOString(),
       updatedAt: now.toDate().toISOString(),
@@ -84,10 +80,13 @@ export class OrderService {
     if (updates.items || updates.discount !== undefined) {
       const existing = await this.getOrder(id);
       const items = updates.items ?? existing.items;
-      const discount = updates.discount !== undefined ? Math.max(0, updates.discount) : existing.discount;
-      const subtotal = items.reduce((sum, item) => sum + item.priceCharged * item.quantity, 0);
-      const total = Math.max(0, subtotal - discount);
-      financialUpdates = { subtotal, discount, total };
+      const discount = updates.discount !== undefined ? updates.discount : existing.discount;
+      const pricing = calculateOrderPricing(items, discount);
+      financialUpdates = {
+        subtotal: pricing.subtotal,
+        discount: pricing.discount,
+        total: pricing.total,
+      };
     }
 
     const upd = {

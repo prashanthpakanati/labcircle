@@ -2,6 +2,7 @@
 
 import { OrderFormData } from "../models/form";
 import { OrderCollectionType } from "../models/enums";
+import { calculateOrderPricing } from "../utils/calculatePricing";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -37,17 +38,26 @@ export function validateOrder(data: OrderFormData): ValidationResult {
         errors.items = `Item "${item.testName}" must have a non-negative price`;
         break;
       }
-      if (typeof item.quantity !== "number" || isNaN(item.quantity) || item.quantity < 1) {
-        errors.items = `Item "${item.testName}" quantity must be at least 1`;
+      if (
+        typeof item.quantity !== "number" ||
+        isNaN(item.quantity) ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1
+      ) {
+        errors.items = `Item "${item.testName}" quantity must be an integer >= 1`;
         break;
       }
     }
   }
 
+  const pricing = calculateOrderPricing(data.items || [], data.discount || 0);
+
   if (data.discount === undefined || data.discount === null) {
     errors.discount = "Discount is required";
   } else if (typeof data.discount !== "number" || isNaN(data.discount) || data.discount < 0) {
     errors.discount = "Discount must be a non-negative number";
+  } else if (data.discount > pricing.subtotal && pricing.subtotal > 0) {
+    errors.discount = `Discount (₹${data.discount}) cannot exceed subtotal (₹${pricing.subtotal})`;
   }
 
   return {
