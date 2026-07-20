@@ -65,17 +65,17 @@ export default function TestDetailsHeader({ test, onRefresh }: TestDetailsHeader
             {test.status === TestStatus.Active ? "Deactivate Test" : "Activate Test"}
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled
-            title="Edit feature available in next milestone"
-            aria-label="Edit Test (disabled)"
-          >
-            <Edit className="h-4 w-4" />
-            Edit Test
-          </Button>
+          <Link href={`/tests/${test.id}/edit`} passHref legacyBehavior>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              aria-label="Edit Test"
+            >
+              <Edit className="h-4 w-4" />
+              Edit Test
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
