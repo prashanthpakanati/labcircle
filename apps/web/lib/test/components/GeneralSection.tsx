@@ -10,6 +10,7 @@ interface GeneralSectionProps {
   status: TestStatus;
   errors: Record<string, string>;
   onChange: (field: string, value: string | number | boolean) => void;
+  codeReadOnly?: boolean;
 }
 
 export default function GeneralSection({
@@ -18,6 +19,7 @@ export default function GeneralSection({
   status,
   errors,
   onChange,
+  codeReadOnly = false,
 }: GeneralSectionProps) {
   return (
     <div className="space-y-4 border border-border p-4 rounded-lg bg-white">
@@ -52,6 +54,10 @@ export default function GeneralSection({
             value={code}
             onChange={(e) => onChange("code", e.target.value.toUpperCase())}
             aria-invalid={!!errors.code}
+            disabled={codeReadOnly}
+            readOnly={codeReadOnly}
+            title={codeReadOnly ? "Test code cannot be changed after creation" : undefined}
+            className={codeReadOnly ? "opacity-60 cursor-not-allowed" : ""}
           />
           {errors.code && <p className="text-xs text-destructive">{errors.code}</p>}
         </div>

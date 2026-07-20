@@ -18,12 +18,19 @@ export function useCreateTest() {
     setError(null);
     setSuccess(false);
     try {
+      // Validate form fields
       const validation = validateTest(form);
       if (!validation.isValid) {
         throw new Error("Validation failed");
       }
-      const test = TestMapper.toTest(form);
+      // Ensure test code uniqueness
       const service = new TestService();
+      const existingTests = await service.listTests();
+      const duplicate = existingTests.find((t) => t.code.toLowerCase() === form.code.toLowerCase());
+      if (duplicate) {
+        throw new Error(`Test code "${form.code}" already exists`);
+      }
+      const test = TestMapper.toTest(form);
       const created = await service.createTest(test);
       setSuccess(true);
       return created;

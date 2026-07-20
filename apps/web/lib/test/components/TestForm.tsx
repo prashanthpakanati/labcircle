@@ -41,6 +41,8 @@ interface TestFormProps {
   onCancel?: () => void;
   serverError?: string | null;
   existingCodes?: string[];
+  /** When true the Test Code field is rendered as read-only (for edit mode). */
+  codeReadOnly?: boolean;
 }
 
 export default function TestForm({
@@ -51,6 +53,7 @@ export default function TestForm({
   onCancel,
   serverError,
   existingCodes = [],
+  codeReadOnly = false,
 }: TestFormProps) {
   const mergedInitialState: FullTestFormState = {
     ...defaultFormState,
@@ -148,6 +151,7 @@ export default function TestForm({
         status={formData.status}
         errors={errors}
         onChange={handleChange}
+        codeReadOnly={codeReadOnly}
       />
 
       <ClassificationSection
