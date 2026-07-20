@@ -69,7 +69,7 @@ export default function SampleDetailsPage({ params }: SampleDetailsPageProps) {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <SampleDetailsHeader sample={sample} />
+      <SampleDetailsHeader sample={sample} onStatusUpdated={refetch} />
 
       {/* Two-column layout (Desktop) / Single-column layout (Mobile) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

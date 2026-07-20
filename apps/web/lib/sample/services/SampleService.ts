@@ -19,7 +19,8 @@ import {
 import { Sample } from "../models/types";
 import { SampleStatus } from "../models/enums";
 import { SampleFormData, SampleMapper } from "../models/form";
-import { validateSample, isValidStatusTransition } from "../validation/validateSample";
+import { validateSample } from "../validation/validateSample";
+import { canTransition } from "../utils/workflow";
 
 /**
  * SampleService implements CRUD operations for the Sample domain.
@@ -102,25 +103,73 @@ export class SampleService {
 
   /**
    * Update mutable fields of an existing Sample.
-   * When `status` is provided the method validates the transition is legal
-   * before persisting.
+   * When `status` is provided, delegates to `updateSampleStatus` for status validation and timestamps.
    */
   async updateSample(
     id: string,
     updates: Partial<SampleFormData> & { status?: SampleStatus }
   ): Promise<void> {
-    if (updates.status !== undefined) {
-      const existing = await this.getSample(id);
-      if (!isValidStatusTransition(existing.status, updates.status)) {
-        throw new Error(
-          `Invalid status transition: ${existing.status} → ${updates.status}`
-        );
-      }
+    const otherUpdates = { ...updates };
+    if (otherUpdates.status !== undefined) {
+      await this.updateSampleStatus(id, otherUpdates.status);
+      delete otherUpdates.status;
+      if (Object.keys(otherUpdates).length === 0) return;
     }
 
     const upd = {
-      ...updates,
+      ...otherUpdates,
       updatedAt: Timestamp.now().toDate().toISOString(),
+    };
+
+    await setDoc(doc(this.db, SAMPLE_COLLECTION, id), upd, { merge: true });
+  }
+
+  /**
+   * Controlled status transition method.
+   * Validates transition using the centralized workflow engine (`canTransition`),
+   * updates status, sets lifecycle timestamps automatically without overwriting existing ones,
+   * and updates `updatedAt`.
+   */
+  async updateSampleStatus(id: string, newStatus: SampleStatus): Promise<void> {
+    const existing = await this.getSample(id);
+
+    if (!canTransition(existing.status, newStatus)) {
+      throw new Error(
+        `Invalid status transition: Cannot transition from ${existing.status} to ${newStatus}`
+      );
+    }
+
+    const now = Timestamp.now().toDate().toISOString();
+
+    const timestampUpdates: Partial<Sample> = {};
+
+    switch (newStatus) {
+      case SampleStatus.Collected:
+        if (!existing.collectedAt) {
+          timestampUpdates.collectedAt = now;
+        }
+        break;
+      case SampleStatus.ReceivedAtLab:
+        if (!existing.receivedAtLabAt) {
+          timestampUpdates.receivedAtLabAt = now;
+        }
+        break;
+      case SampleStatus.Processing:
+        if (!existing.processingStartedAt) {
+          timestampUpdates.processingStartedAt = now;
+        }
+        break;
+      case SampleStatus.Completed:
+        if (!existing.completedAt) {
+          timestampUpdates.completedAt = now;
+        }
+        break;
+    }
+
+    const upd = {
+      status: newStatus,
+      ...timestampUpdates,
+      updatedAt: now,
     };
 
     await setDoc(doc(this.db, SAMPLE_COLLECTION, id), upd, { merge: true });

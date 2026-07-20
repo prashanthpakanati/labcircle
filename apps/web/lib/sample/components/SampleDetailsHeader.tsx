@@ -7,13 +7,18 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Sample } from "../models/types";
 import SampleStatusBadge from "./SampleStatusBadge";
+import SampleStatusActions from "./SampleStatusActions";
 import { ArrowLeft, Edit, Printer, TestTube2 } from "lucide-react";
 
 interface SampleDetailsHeaderProps {
   sample: Sample;
+  onStatusUpdated?: () => void;
 }
 
-export default function SampleDetailsHeader({ sample }: SampleDetailsHeaderProps) {
+export default function SampleDetailsHeader({
+  sample,
+  onStatusUpdated = () => {},
+}: SampleDetailsHeaderProps) {
   const formattedDate = new Date(sample.createdAt).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -33,7 +38,7 @@ export default function SampleDetailsHeader({ sample }: SampleDetailsHeaderProps
           <ArrowLeft className="h-3.5 w-3.5 mr-1" />
           Back to Samples
         </Link>
-        
+
         {/* Read-Only Disabled Action Buttons */}
         <div className="flex items-center gap-2">
           <Button
@@ -76,6 +81,13 @@ export default function SampleDetailsHeader({ sample }: SampleDetailsHeaderProps
             </p>
           </div>
         </div>
+
+        {/* Controlled Dynamic Workflow Status Action Buttons */}
+        <SampleStatusActions
+          sampleId={sample.id}
+          currentStatus={sample.status}
+          onStatusUpdated={onStatusUpdated}
+        />
       </div>
     </header>
   );
