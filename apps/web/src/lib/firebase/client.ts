@@ -33,7 +33,7 @@ if (useEmulator && typeof window !== "undefined") {
       connectFirestoreEmulator(db, "127.0.0.1", 8080);
       connectStorageEmulator(storage, "127.0.0.1", 9199);
       globalObj[emulatorKey] = true;
-      console.log("Firebase Emulators bound successfully on Client SDK.");
+        // Firebase Emulators bound successfully on Client SDK.
     } catch (error) {
       console.warn("Failed to bind Firebase Emulators on Client SDK:", error);
     }
