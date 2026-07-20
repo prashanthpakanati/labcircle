@@ -1,7 +1,8 @@
 // apps/web/lib/sample/validation/validateSample.ts
 
 import { SampleFormData } from "../models/form";
-import { CollectionType, CollectorType } from "../models/enums";
+import { CollectionType, CollectorType, SampleStatus } from "../models/enums";
+import { canTransition, getAllowedTransitions } from "../utils/workflow";
 
 export interface SampleValidationResult {
   isValid: boolean;
@@ -87,17 +88,7 @@ export function validateSample(data: SampleFormData): SampleValidationResult {
 
 // ─── Status transition guard ─────────────────────────────────────────────────
 
-import { SampleStatus } from "../models/enums";
-
-/** Allowed forward transitions for the Sample lifecycle. */
-const ALLOWED_TRANSITIONS: Record<SampleStatus, SampleStatus[]> = {
-  [SampleStatus.PendingCollection]: [SampleStatus.Collected, SampleStatus.Cancelled],
-  [SampleStatus.Collected]: [SampleStatus.ReceivedAtLab, SampleStatus.Cancelled],
-  [SampleStatus.ReceivedAtLab]: [SampleStatus.Processing, SampleStatus.Cancelled],
-  [SampleStatus.Processing]: [SampleStatus.Completed, SampleStatus.Cancelled],
-  [SampleStatus.Completed]: [],
-  [SampleStatus.Cancelled]: [],
-};
+export { canTransition, getAllowedTransitions };
 
 /**
  * Returns true if transitioning from `current` to `next` is a valid
@@ -107,5 +98,5 @@ export function isValidStatusTransition(
   current: SampleStatus,
   next: SampleStatus
 ): boolean {
-  return ALLOWED_TRANSITIONS[current]?.includes(next) ?? false;
+  return canTransition(current, next);
 }
