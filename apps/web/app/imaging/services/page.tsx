@@ -42,14 +42,13 @@ function ServiceCatalogContent() {
       categoryId: selectedCategory !== "ALL" ? selectedCategory : undefined,
       modality: selectedModality !== "ALL" ? selectedModality : undefined,
       search: searchVal ? searchVal : undefined,
-      activeOnly: !showInactive,
       fastingRequired: fastingFilter === "REQUIRED" ? true : fastingFilter === "NOT_REQUIRED" ? false : undefined,
       contrastRequired: contrastFilter === "REQUIRED" ? true : contrastFilter === "NOT_REQUIRED" ? false : undefined,
     };
-  }, [selectedCategory, selectedModality, searchVal, showInactive, fastingFilter, contrastFilter]);
+  }, [selectedCategory, selectedModality, searchVal, fastingFilter, contrastFilter]);
 
   // Services hook
-  const { data: services, loading, error, refetch } = useImagingServices(queryFilters);
+  const { data: services, loading, error, refetch } = useImagingServices(queryFilters, { includeDeleted: showInactive });
 
   // Determine if filters are currently active (for Clear button display)
   const isFilterActive = useMemo(() => {

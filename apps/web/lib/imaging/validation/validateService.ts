@@ -1,5 +1,6 @@
 // apps/web/lib/imaging/validation/validateService.ts
 
+import { CatalogStatus } from "../models/enums";
 import { ServiceFormData } from "../models/form";
 
 export interface ServiceValidationResult {
@@ -51,6 +52,12 @@ export function validateService(data: ServiceFormData): ServiceValidationResult 
     errors.reportTatHours = "Report turnaround hours is required";
   } else if (typeof data.reportTatHours !== "number" || isNaN(data.reportTatHours) || data.reportTatHours <= 0) {
     errors.reportTatHours = "Turnaround hours must be a positive number";
+  }
+
+  if (!data.status) {
+    errors.status = "Status is required";
+  } else if (!Object.values(CatalogStatus).includes(data.status)) {
+    errors.status = "Invalid status selected";
   }
 
   return {

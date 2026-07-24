@@ -1,9 +1,11 @@
 // apps/web/lib/imaging/models/form.ts
 
+import { CatalogStatus } from "./enums";
 import { ImagingCategory, ImagingService, ServicePreparation } from "./types";
 
 /**
  * Writeable payload interface for creating/updating a category.
+ * Note: 'code' must become read-only in editing forms after creation.
  */
 export interface CategoryFormData {
   parentId: string | null;
@@ -12,11 +14,12 @@ export interface CategoryFormData {
   description: string;
   icon: string;
   displayOrder: number;
-  active: boolean;
+  status: CatalogStatus;
 }
 
 /**
  * Writeable payload interface for creating/updating an imaging service.
+ * Note: 'serviceCode' must become read-only in editing forms after creation.
  */
 export interface ServiceFormData {
   categoryId: string;
@@ -33,7 +36,8 @@ export interface ServiceFormData {
   featured: boolean;
   popular: boolean;
   preparation: ServicePreparation;
-  active: boolean;
+  status: CatalogStatus;
+  keywords: string[];
 }
 
 /**
@@ -51,9 +55,13 @@ export const ImagingMapper = {
       description: cat.description ?? "",
       icon: cat.icon ?? "Scan",
       displayOrder: cat.displayOrder ?? 0,
-      active: cat.active ?? true,
+      status: cat.status ?? CatalogStatus.Draft,
+      createdBy: cat.createdBy,
+      updatedBy: cat.updatedBy,
       createdAt: cat.createdAt,
       updatedAt: cat.updatedAt,
+      deletedAt: cat.deletedAt ?? null,
+      deletedBy: cat.deletedBy ?? null,
     };
   },
 
@@ -67,9 +75,13 @@ export const ImagingMapper = {
       description: (data.description as string) || "",
       icon: (data.icon as string) || "Scan",
       displayOrder: typeof data.displayOrder === "number" ? data.displayOrder : 0,
-      active: typeof data.active === "boolean" ? data.active : true,
+      status: (data.status as CatalogStatus) || CatalogStatus.Draft,
+      createdBy: (data.createdBy as string) || "",
+      updatedBy: (data.updatedBy as string) || "",
       createdAt: (data.createdAt as string) || new Date().toISOString(),
       updatedAt: (data.updatedAt as string) || new Date().toISOString(),
+      deletedAt: (data.deletedAt as string) || null,
+      deletedBy: (data.deletedBy as string) || null,
     };
   },
 
@@ -102,9 +114,13 @@ export const ImagingMapper = {
         documentRequirements: service.preparation?.documentRequirements ?? [],
         additionalInstructions: service.preparation?.additionalInstructions ?? "",
       },
-      active: service.active ?? true,
+      status: service.status ?? CatalogStatus.Draft,
+      createdBy: service.createdBy,
+      updatedBy: service.updatedBy,
       createdAt: service.createdAt,
       updatedAt: service.updatedAt,
+      deletedAt: service.deletedAt ?? null,
+      deletedBy: service.deletedBy ?? null,
     };
   },
 
@@ -138,9 +154,13 @@ export const ImagingMapper = {
         documentRequirements: Array.isArray(rawPrep.documentRequirements) ? (rawPrep.documentRequirements as string[]) : undefined,
         additionalInstructions: (rawPrep.additionalInstructions as string) || undefined,
       },
-      active: typeof data.active === "boolean" ? data.active : true,
+      status: (data.status as CatalogStatus) || CatalogStatus.Draft,
+      createdBy: (data.createdBy as string) || "",
+      updatedBy: (data.updatedBy as string) || "",
       createdAt: (data.createdAt as string) || new Date().toISOString(),
       updatedAt: (data.updatedAt as string) || new Date().toISOString(),
+      deletedAt: (data.deletedAt as string) || null,
+      deletedBy: (data.deletedBy as string) || null,
     };
   },
 };

@@ -1,114 +1,133 @@
 // apps/web/lib/imaging/services/ImagingCatalogService.ts
 
-import {
-  getFirestore,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-} from "firebase/firestore";
-import { COLLECTIONS } from "../models/constants";
+import { doc, collection, getFirestore } from "firebase/firestore";
+import { ImagingCategoryRepository } from "../repositories/ImagingCategoryRepository";
+import { ImagingServiceRepository } from "../repositories/ImagingServiceRepository";
 import { ImagingCategory, ImagingService } from "../models/types";
-import { ImagingMapper } from "../models/form";
+import { CategoryFormData, ServiceFormData } from "../models/form";
+import { validateCategory } from "../validation/validateCategory";
+import { validateService } from "../validation/validateService";
+import { CatalogStatus } from "../models/enums";
 
 export class ImagingCatalogService {
+  private categoryRepo = new ImagingCategoryRepository();
+  private serviceRepo = new ImagingServiceRepository();
   private db = getFirestore();
 
-  /**
-   * Fetches all imaging categories.
-   * Automatically runs database seed if categories collection is empty.
-   */
-  async getCategories(): Promise<ImagingCategory[]> {
-    const colRef = collection(this.db, COLLECTIONS.categories);
-    const snap = await getDocs(colRef);
+  /** Fetch all categories (patient vs admin view depends on status & includeDeleted parameters) */
+  async getCategories(options?: { isAdmin?: boolean; includeDeleted?: boolean }): Promise<ImagingCategory[]> {
+    let categories = await this.categoryRepo.listCategories(options?.includeDeleted);
     
-    if (snap.empty) {
-      await this.seedDiagnosticCatalog();
-      const reSnap = await getDocs(colRef);
-      return reSnap.docs.map((d) => 
-        ImagingMapper.fromCategoryFirestore({ id: d.id, ...d.data() })
-      ).sort((a, b) => a.displayOrder - b.displayOrder);
+    if (!options?.isAdmin) {
+      categories = categories.filter((c) => c.status === CatalogStatus.Published);
+    }
+    return categories;
+  }
+
+  /** Fetch single category by ID */
+  async getCategory(id: string): Promise<ImagingCategory | null> {
+    return this.categoryRepo.getCategory(id);
+  }
+
+  /** Create a new category with full audit metadata */
+  async createCategory(formData: CategoryFormData, userId: string): Promise<ImagingCategory> {
+    const valResult = validateCategory(formData);
+    if (!valResult.isValid) {
+      throw new Error(`Category validation failed: ${JSON.stringify(valResult.errors)}`);
     }
 
-    return snap.docs.map((d) => 
-      ImagingMapper.fromCategoryFirestore({ id: d.id, ...d.data() })
-    ).sort((a, b) => a.displayOrder - b.displayOrder);
-  }
-
-  /**
-   * Fetch a single category by ID.
-   */
-  async getCategory(id: string): Promise<ImagingCategory | null> {
-    const docRef = doc(this.db, COLLECTIONS.categories, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return ImagingMapper.fromCategoryFirestore({ id: snap.id, ...snap.data() });
-  }
-
-  /**
-   * Creates a new category.
-   */
-  async createCategory(data: Omit<ImagingCategory, "id" | "createdAt" | "updatedAt"> & { id?: string }): Promise<ImagingCategory> {
-    const id = data.id || doc(collection(this.db, COLLECTIONS.categories)).id;
+    const id = doc(collection(this.db, "dummy")).id; // generate secure Firestore doc ID
     const now = new Date().toISOString();
+
     const category: ImagingCategory = {
-      ...data,
       id,
+      parentId: formData.parentId,
+      code: formData.code,
+      name: formData.name,
+      description: formData.description,
+      icon: formData.icon,
+      displayOrder: formData.displayOrder,
+      status: formData.status,
+      createdBy: userId,
+      updatedBy: userId,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
+      deletedBy: null,
     };
-    const docRef = doc(this.db, COLLECTIONS.categories, id);
-    await setDoc(docRef, ImagingMapper.toCategoryFirestore(category));
+
+    await this.categoryRepo.createCategory(category);
     return category;
   }
 
-  /**
-   * Updates an existing category.
-   */
-  async updateCategory(id: string, data: Partial<Omit<ImagingCategory, "id" | "createdAt" | "updatedAt">>): Promise<void> {
-    const docRef = doc(this.db, COLLECTIONS.categories, id);
-    const updatePayload: Record<string, unknown> = {
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-    await updateDoc(docRef, updatePayload);
-  }
-
-  /**
-   * Fetches services matching optional filters.
-   * If services collection is empty, triggers a auto-seed.
-   */
-  async getServices(filters?: {
-    categoryId?: string;
-    modality?: string;
-    search?: string;
-    activeOnly?: boolean;
-    featuredOnly?: boolean;
-    popularOnly?: boolean;
-    fastingRequired?: boolean;
-    contrastRequired?: boolean;
-  }): Promise<ImagingService[]> {
-    const colRef = collection(this.db, COLLECTIONS.services);
-    let snap = await getDocs(colRef);
-
-    if (snap.empty) {
-      await this.seedDiagnosticCatalog();
-      snap = await getDocs(colRef);
+  /** Update category, enforcing 'code' immutability and re-running validation checks */
+  async updateCategory(id: string, formData: Partial<CategoryFormData>, userId: string): Promise<void> {
+    const existing = await this.categoryRepo.getCategory(id);
+    if (!existing) {
+      throw new Error(`Category with ID ${id} not found`);
     }
 
-    let services = snap.docs.map((d) =>
-      ImagingMapper.fromServiceFirestore({ id: d.id, ...d.data() })
-    );
+    // Task 4: Enforce category code immutability
+    if (formData.code !== undefined && formData.code !== existing.code) {
+      throw new Error("Category field 'code' is immutable and cannot be updated after creation");
+    }
 
-    // Apply client-side filters (simplifies querying without requiring Firestore index setup)
+    // Assemble merged representation to run validations
+    const merged: CategoryFormData = {
+      parentId: formData.parentId !== undefined ? formData.parentId : existing.parentId,
+      code: existing.code,
+      name: formData.name !== undefined ? formData.name : existing.name,
+      description: formData.description !== undefined ? formData.description : existing.description,
+      icon: formData.icon !== undefined ? formData.icon : existing.icon,
+      displayOrder: formData.displayOrder !== undefined ? formData.displayOrder : existing.displayOrder,
+      status: formData.status !== undefined ? formData.status : existing.status,
+    };
+
+    const valResult = validateCategory(merged);
+    if (!valResult.isValid) {
+      throw new Error(`Category validation failed: ${JSON.stringify(valResult.errors)}`);
+    }
+
+    // Write audited updates
+    await this.categoryRepo.updateCategory(id, {
+      parentId: merged.parentId,
+      name: merged.name,
+      description: merged.description,
+      icon: merged.icon,
+      displayOrder: merged.displayOrder,
+      status: merged.status,
+      updatedBy: userId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  /** Soft delete a category */
+  async deleteCategory(id: string, userId: string): Promise<void> {
+    await this.categoryRepo.softDeleteCategory(id, userId);
+  }
+
+  /** Fetch active services (admin view includes draft/archived, patients see published only) */
+  async getServices(
+    filters?: {
+      categoryId?: string;
+      modality?: string;
+      search?: string;
+      fastingRequired?: boolean;
+      contrastRequired?: boolean;
+      featuredOnly?: boolean;
+      popularOnly?: boolean;
+    },
+    options?: { isAdmin?: boolean; includeDeleted?: boolean }
+  ): Promise<ImagingService[]> {
+    let services = await this.serviceRepo.listServices(options?.includeDeleted);
+
+    // Apply CatalogStatus visibility rules
+    if (!options?.isAdmin) {
+      services = services.filter((s) => s.status === CatalogStatus.Published);
+    }
+
+    // Apply query parameters
     if (filters) {
-      if (filters.activeOnly) {
-        services = services.filter((s) => s.active);
-      }
       if (filters.categoryId) {
         services = services.filter((s) => s.categoryId === filters.categoryId);
       }
@@ -144,280 +163,117 @@ export class ImagingCatalogService {
     return services;
   }
 
-  /**
-   * Fetch a single service by ID.
-   */
+  /** Fetch single service by ID */
   async getService(id: string): Promise<ImagingService | null> {
-    const docRef = doc(this.db, COLLECTIONS.services, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return ImagingMapper.fromServiceFirestore({ id: snap.id, ...snap.data() });
+    return this.serviceRepo.getService(id);
   }
 
-  /**
-   * Fetch a single service by URL slug.
-   */
+  /** Fetch single service by slug */
   async getServiceBySlug(slug: string): Promise<ImagingService | null> {
-    const colRef = collection(this.db, COLLECTIONS.services);
-    const q = query(colRef, where("slug", "==", slug));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const docSnap = snap.docs[0];
-    return ImagingMapper.fromServiceFirestore({ id: docSnap.id, ...docSnap.data() });
+    return this.serviceRepo.getServiceBySlug(slug);
   }
 
-  /**
-   * Create a new imaging service catalog item.
-   */
-  async createService(data: Omit<ImagingService, "id" | "createdAt" | "updatedAt"> & { id?: string }): Promise<ImagingService> {
-    const id = data.id || doc(collection(this.db, COLLECTIONS.services)).id;
+  /** Create a new service with full audit metadata */
+  async createService(formData: ServiceFormData, userId: string): Promise<ImagingService> {
+    const valResult = validateService(formData);
+    if (!valResult.isValid) {
+      throw new Error(`Service validation failed: ${JSON.stringify(valResult.errors)}`);
+    }
+
+    const id = doc(collection(this.db, "dummy")).id;
     const now = new Date().toISOString();
+
     const service: ImagingService = {
-      ...data,
       id,
+      categoryId: formData.categoryId,
+      slug: formData.slug,
+      serviceCode: formData.serviceCode,
+      serviceName: formData.serviceName,
+      aliases: formData.aliases,
+      description: formData.description,
+      modality: formData.modality,
+      bodyPart: formData.bodyPart,
+      durationMinutes: formData.durationMinutes,
+      reportTatHours: formData.reportTatHours,
+      thumbnail: formData.thumbnail,
+      featured: formData.featured,
+      popular: formData.popular,
+      keywords: formData.keywords,
+      preparation: formData.preparation,
+      status: formData.status,
+      createdBy: userId,
+      updatedBy: userId,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
+      deletedBy: null,
     };
-    const docRef = doc(this.db, COLLECTIONS.services, id);
-    await setDoc(docRef, ImagingMapper.toServiceFirestore(service));
+
+    await this.serviceRepo.createService(service);
     return service;
   }
 
-  /**
-   * Update an imaging service catalog item details.
-   */
-  async updateService(id: string, data: Partial<Omit<ImagingService, "id" | "createdAt" | "updatedAt">>): Promise<void> {
-    const docRef = doc(this.db, COLLECTIONS.services, id);
-    const updatePayload: Record<string, unknown> = {
-      ...data,
-      updatedAt: new Date().toISOString(),
+  /** Update service details, enforcing 'serviceCode' immutability and re-validating inputs */
+  async updateService(id: string, formData: Partial<ServiceFormData>, userId: string): Promise<void> {
+    const existing = await this.serviceRepo.getService(id);
+    if (!existing) {
+      throw new Error(`Service with ID ${id} not found`);
+    }
+
+    // Task 4: Enforce service code immutability
+    if (formData.serviceCode !== undefined && formData.serviceCode !== existing.serviceCode) {
+      throw new Error("Service field 'serviceCode' is immutable and cannot be updated after creation");
+    }
+
+    // Assemble merged representation to run validation
+    const merged: ServiceFormData = {
+      categoryId: formData.categoryId !== undefined ? formData.categoryId : existing.categoryId,
+      slug: formData.slug !== undefined ? formData.slug : existing.slug,
+      serviceCode: existing.serviceCode,
+      serviceName: formData.serviceName !== undefined ? formData.serviceName : existing.serviceName,
+      aliases: formData.aliases !== undefined ? formData.aliases : existing.aliases,
+      description: formData.description !== undefined ? formData.description : existing.description,
+      modality: formData.modality !== undefined ? formData.modality : existing.modality,
+      bodyPart: formData.bodyPart !== undefined ? formData.bodyPart : existing.bodyPart,
+      durationMinutes: formData.durationMinutes !== undefined ? formData.durationMinutes : existing.durationMinutes,
+      reportTatHours: formData.reportTatHours !== undefined ? formData.reportTatHours : existing.reportTatHours,
+      thumbnail: formData.thumbnail !== undefined ? formData.thumbnail : existing.thumbnail,
+      featured: formData.featured !== undefined ? formData.featured : existing.featured,
+      popular: formData.popular !== undefined ? formData.popular : existing.popular,
+      preparation: formData.preparation !== undefined ? formData.preparation : existing.preparation,
+      status: formData.status !== undefined ? formData.status : existing.status,
+      keywords: formData.keywords !== undefined ? formData.keywords : existing.keywords,
     };
-    await updateDoc(docRef, updatePayload);
+
+    const valResult = validateService(merged);
+    if (!valResult.isValid) {
+      throw new Error(`Service validation failed: ${JSON.stringify(valResult.errors)}`);
+    }
+
+    // Write audited updates
+    await this.serviceRepo.updateService(id, {
+      categoryId: merged.categoryId,
+      slug: merged.slug,
+      serviceName: merged.serviceName,
+      aliases: merged.aliases,
+      description: merged.description,
+      modality: merged.modality,
+      bodyPart: merged.bodyPart,
+      durationMinutes: merged.durationMinutes,
+      reportTatHours: merged.reportTatHours,
+      thumbnail: merged.thumbnail,
+      featured: merged.featured,
+      popular: merged.popular,
+      keywords: merged.keywords,
+      preparation: merged.preparation,
+      status: merged.status,
+      updatedBy: userId,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
-  /**
-   * Internal Seeder to populate dynamic hierarchical categories & predefined imaging services.
-   * Executed automatically on initial list access if Firestore contains 0 records.
-   */
-  private async seedDiagnosticCatalog(): Promise<void> {
-    // 1. Create Parent Category (Diagnostic Imaging)
-    const parentId = "parent-diag-imaging";
-    const now = new Date().toISOString();
-    
-    await setDoc(doc(this.db, COLLECTIONS.categories, parentId), {
-      id: parentId,
-      parentId: null,
-      code: "DIAGNOSTIC-IMAGING",
-      name: "Diagnostic Imaging",
-      description: "Non-invasive scan and radiology imaging procedures.",
-      icon: "Scan",
-      displayOrder: 1,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // 2. Define Category Child Entries
-    const childCategories = [
-      { id: "cat-mri", name: "MRI", code: "MRI", icon: "Activity", displayOrder: 1 },
-      { id: "cat-ct", name: "CT Scan", code: "CT-SCAN", icon: "Disc", displayOrder: 2 },
-      { id: "cat-us", name: "Ultrasound", code: "ULTRASOUND", icon: "Waves", displayOrder: 3 },
-      { id: "cat-xray", name: "X-Ray", code: "X-RAY", icon: "Grid", displayOrder: 4 },
-      { id: "cat-pet", name: "PET-CT", code: "PET-CT", icon: "Radio", displayOrder: 5 },
-      { id: "cat-mammo", name: "Mammography", code: "MAMMOGRAPHY", icon: "ShieldAlert", displayOrder: 6 },
-      { id: "cat-dexa", name: "DEXA", code: "DEXA", icon: "Bone", displayOrder: 7 },
-      { id: "cat-nucmed", name: "Nuclear Medicine", code: "NUCLEAR-MED", icon: "Atom", displayOrder: 8 },
-      { id: "cat-cardio", name: "Cardiology Diagnostics", code: "CARDIOLOGY", icon: "Heart", displayOrder: 9 },
-      { id: "cat-pulm", name: "Pulmonary Diagnostics", code: "PULMONARY", icon: "Wind", displayOrder: 10 },
-      { id: "cat-neuro", name: "Neurology Diagnostics", code: "NEUROLOGY", icon: "Brain", displayOrder: 11 },
-      { id: "cat-dental", name: "Dental Imaging", code: "DENTAL", icon: "Smile", displayOrder: 12 },
-      { id: "cat-women", name: "Women's Imaging", code: "WOMENS-IMAGING", icon: "Sparkles", displayOrder: 13 },
-      { id: "cat-men", name: "Men's Imaging", code: "MENS-IMAGING", icon: "User", displayOrder: 14 },
-      { id: "cat-ent", name: "ENT Diagnostics", code: "ENT-DIAG", icon: "Volume2", displayOrder: 15 },
-      { id: "cat-ophth", name: "Ophthalmology Diagnostics", code: "OPHTHALMOLOGY", icon: "Eye", displayOrder: 16 },
-    ];
-
-    for (const cat of childCategories) {
-      await setDoc(doc(this.db, COLLECTIONS.categories, cat.id), {
-        id: cat.id,
-        parentId,
-        code: cat.code,
-        name: cat.name,
-        description: `${cat.name} diagnostic catalog scans.`,
-        icon: cat.icon,
-        displayOrder: cat.displayOrder,
-        active: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    // 3. Predefined Services Seeding List
-    const initialServices = [
-      {
-        id: "svc-mri-brain",
-        categoryId: "cat-mri",
-        slug: "mri-brain",
-        serviceCode: "MRI-BRAIN",
-        serviceName: "MRI Brain",
-        aliases: ["Magnetic Resonance Imaging Brain", "Brain Scan", "Head MRI"],
-        description: "High-resolution diagnostic scanning of the brain structure using magnetic resonance fields. Essential for stroke, tumors, and neurological diagnostic investigations.",
-        modality: "MRI",
-        bodyPart: "Brain",
-        durationMinutes: 45,
-        reportTatHours: 24,
-        thumbnail: "https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&q=80&w=400",
-        featured: true,
-        popular: true,
-        keywords: ["brain", "head", "neuro", "magnetic", "mri"],
-        preparation: {
-          fastingRequired: false,
-          waterAllowed: true,
-          contrastRequired: false,
-          removeMetalObjects: true,
-          pregnancyWarning: true,
-          medicationInstructions: "Take your regular prescription medications unless advised otherwise by your doctor.",
-          documentRequirements: ["Doctor prescription is mandatory.", "Carry previous scan/MRI films if available."],
-          additionalInstructions: "Please arrive 15 minutes before the slot for safety screening. Do not wear clothing containing metallic fibers or zippers.",
-        },
-        active: true,
-      },
-      {
-        id: "svc-ct-chest",
-        categoryId: "cat-ct",
-        slug: "hrct-chest",
-        serviceCode: "CT-CHEST-HRCT",
-        serviceName: "HRCT Chest",
-        aliases: ["High-Resolution CT Chest", "Lung CT Scan", "Thorax CT"],
-        description: "Detailed diagnostic evaluation of lung tissue to diagnose pneumonia, COVID-19 sequelae, pulmonary fibrosis, and respiratory pathologies.",
-        modality: "CT Scan",
-        bodyPart: "Chest",
-        durationMinutes: 20,
-        reportTatHours: 12,
-        thumbnail: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&q=80&w=400",
-        featured: true,
-        popular: true,
-        keywords: ["chest", "lung", "thorax", "ct", "hrct"],
-        preparation: {
-          fastingRequired: true,
-          fastingHours: 4,
-          waterAllowed: true,
-          contrastRequired: false,
-          removeMetalObjects: true,
-          pregnancyWarning: true,
-          medicationInstructions: "Regular cardiac and diabetes medications can be continued.",
-          documentRequirements: ["Prescription from a pulmonologist or doctor.", "Previous chest X-Rays/CTs."],
-          additionalInstructions: "Inform technician if you are diabetic, take metformin, or have kidney issues.",
-        },
-        active: true,
-      },
-      {
-        id: "svc-xray-chest",
-        categoryId: "cat-xray",
-        slug: "chest-x-ray",
-        serviceCode: "XRAY-CHEST-PA",
-        serviceName: "Chest X-Ray PA View",
-        aliases: ["Chest X-Ray PA", "CXR PA View"],
-        description: "Standard primary diagnostic radiograph of the chest cavity. Quick diagnostic screening for lung infections, heart size, and rib fractures.",
-        modality: "X-Ray",
-        bodyPart: "Chest",
-        durationMinutes: 10,
-        reportTatHours: 6,
-        thumbnail: "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?auto=format&fit=crop&q=80&w=400",
-        featured: false,
-        popular: true,
-        keywords: ["chest", "xray", "cxr", "lung", "pa"],
-        preparation: {
-          fastingRequired: false,
-          waterAllowed: true,
-          contrastRequired: false,
-          removeMetalObjects: true,
-          pregnancyWarning: true,
-          documentRequirements: ["Doctor prescription."],
-          additionalInstructions: "You will be asked to wear a surgical gown. Remove neck chains and metallic torso items.",
-        },
-        active: true,
-      },
-      {
-        id: "svc-us-abdomen",
-        categoryId: "cat-us",
-        slug: "whole-abdomen-ultrasound",
-        serviceCode: "US-WHOLE-ABDOMEN",
-        serviceName: "Whole Abdomen Ultrasound",
-        aliases: ["USG Whole Abdomen", "Abdomen Sonography"],
-        description: "Non-invasive abdominal imaging scanning liver, gallbladder, kidneys, spleen, pancreas, urinary bladder, and pelvic organs.",
-        modality: "Ultrasound",
-        bodyPart: "Abdomen",
-        durationMinutes: 30,
-        reportTatHours: 12,
-        thumbnail: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400",
-        featured: true,
-        popular: true,
-        keywords: ["abdomen", "usg", "ultrasound", "liver", "kidney"],
-        preparation: {
-          fastingRequired: true,
-          fastingHours: 6,
-          waterAllowed: true,
-          contrastRequired: false,
-          removeMetalObjects: false,
-          pregnancyWarning: false,
-          additionalInstructions: "Drink 4-5 glasses of water 1 hour before the scan. Do not void urine; a full bladder is essential for clear pelvic diagnostics.",
-        },
-        active: true,
-      },
-      {
-        id: "svc-pet-ct",
-        categoryId: "cat-pet",
-        slug: "whole-body-pet-ct",
-        serviceCode: "PETCT-WHOLE-BODY",
-        serviceName: "Whole Body PET-CT",
-        aliases: ["PET CT Scan", "Cancer Staging Scan"],
-        description: "Advanced molecular imaging combining PET metabolic detection and CT structural scanning. Primarily used in oncology staging and response checks.",
-        modality: "PET-CT",
-        bodyPart: "Whole Body",
-        durationMinutes: 120,
-        reportTatHours: 48,
-        thumbnail: "https://images.unsplash.com/photo-1579684389782-64d84b5e901a?auto=format&fit=crop&q=80&w=400",
-        featured: true,
-        popular: false,
-        keywords: ["pet", "petct", "cancer", "staging", "whole body"],
-        preparation: {
-          fastingRequired: true,
-          fastingHours: 12,
-          waterAllowed: true,
-          contrastRequired: true,
-          removeMetalObjects: true,
-          pregnancyWarning: true,
-          medicationInstructions: "Diabetes medications must be strictly coordinated. Blood glucose must be under 150 mg/dL prior to scan injection.",
-          documentRequirements: ["Doctor prescription.", "Previous clinical oncology history.", "Creatinine blood test report."],
-          additionalInstructions: "Strictly avoid exercise and sugars 24 hours prior. Rest quietly in a dark room after radiotracer injection.",
-        },
-        active: true,
-      },
-    ];
-
-    for (const svc of initialServices) {
-      await setDoc(doc(this.db, COLLECTIONS.services, svc.id), {
-        id: svc.id,
-        categoryId: svc.categoryId,
-        slug: svc.slug,
-        serviceCode: svc.serviceCode,
-        serviceName: svc.serviceName,
-        aliases: svc.aliases,
-        description: svc.description,
-        modality: svc.modality,
-        bodyPart: svc.bodyPart,
-        durationMinutes: svc.durationMinutes,
-        reportTatHours: svc.reportTatHours,
-        thumbnail: svc.thumbnail,
-        featured: svc.featured,
-        popular: svc.popular,
-        keywords: svc.keywords,
-        preparation: svc.preparation,
-        active: svc.active,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+  /** Soft delete a service */
+  async deleteService(id: string, userId: string): Promise<void> {
+    await this.serviceRepo.softDeleteService(id, userId);
   }
 }

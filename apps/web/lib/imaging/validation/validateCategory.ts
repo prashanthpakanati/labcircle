@@ -1,5 +1,6 @@
 // apps/web/lib/imaging/validation/validateCategory.ts
 
+import { CatalogStatus } from "../models/enums";
 import { CategoryFormData } from "../models/form";
 
 export interface CategoryValidationResult {
@@ -25,6 +26,12 @@ export function validateCategory(data: CategoryFormData): CategoryValidationResu
 
   if (data.displayOrder === undefined || data.displayOrder === null || typeof data.displayOrder !== "number" || isNaN(data.displayOrder)) {
     errors.displayOrder = "Display order must be a valid number";
+  }
+
+  if (!data.status) {
+    errors.status = "Status is required";
+  } else if (!Object.values(CatalogStatus).includes(data.status)) {
+    errors.status = "Invalid status selected";
   }
 
   return {
