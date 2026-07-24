@@ -147,6 +147,7 @@ function getQuickActions(): QuickAction[] {
     { id: "my-reports", title: "My Reports", href: "/reports" },
     { id: "my-orders", title: "My Orders", href: "/orders" },
     { id: "family-members", title: "Family Members", href: "/family" },
+    { id: "imaging-catalog", title: "Diagnostic Imaging", href: "/imaging" },
   ];
 }
 
