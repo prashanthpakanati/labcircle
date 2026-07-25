@@ -1,0 +1,76 @@
+// apps/web/lib/analytics/models/enums.ts
+
+export enum MetricType {
+  FINANCIAL = "FINANCIAL",
+  OPERATIONAL = "OPERATIONAL",
+  CLINICAL = "CLINICAL",
+  CUSTOMER = "CUSTOMER",
+  COMMUNICATION = "COMMUNICATION",
+  PARTNER = "PARTNER",
+}
+
+export enum DashboardType {
+  EXECUTIVE = "EXECUTIVE",
+  FINANCIAL = "FINANCIAL",
+  OPERATIONAL = "OPERATIONAL",
+  CLINICAL = "CLINICAL",
+  CUSTOMER = "CUSTOMER",
+  PARTNER = "PARTNER",
+}
+
+export enum ReportType {
+  EXECUTIVE_SUMMARY = "EXECUTIVE_SUMMARY",
+  FINANCIAL_PERFORMANCE = "FINANCIAL_PERFORMANCE",
+  OPERATIONAL_EFFICIENCY = "OPERATIONAL_EFFICIENCY",
+  CLINICAL_INTELLIGENCE = "CLINICAL_INTELLIGENCE",
+  CUSTOMER_RETENTION = "CUSTOMER_RETENTION",
+}
+
+export enum ForecastPeriod {
+  DAILY = "DAILY",
+  WEEKLY = "WEEKLY",
+  MONTHLY = "MONTHLY",
+  QUARTERLY = "QUARTERLY",
+  ANNUAL = "ANNUAL",
+}
+
+export enum AlertSeverity {
+  INFO = "INFO",
+  WARNING = "WARNING",
+  HIGH = "HIGH",
+  CRITICAL = "CRITICAL",
+}
+
+export enum AlertStatus {
+  ACTIVE = "ACTIVE",
+  ACKNOWLEDGED = "ACKNOWLEDGED",
+  RESOLVED = "RESOLVED",
+}
+
+export enum AggregationType {
+  SUM = "SUM",
+  AVERAGE = "AVERAGE",
+  COUNT = "COUNT",
+  MIN = "MIN",
+  MAX = "MAX",
+}
+
+export enum TimeGranularity {
+  HOURLY = "HOURLY",
+  DAILY = "DAILY",
+  WEEKLY = "WEEKLY",
+  MONTHLY = "MONTHLY",
+  YEARLY = "YEARLY",
+}
+
+export enum ExportFormat {
+  PDF = "PDF",
+  EXCEL = "EXCEL",
+  CSV = "CSV",
+}
+
+export enum TrendDirection {
+  UPWARD = "UPWARD",
+  DOWNWARD = "DOWNWARD",
+  STABLE = "STABLE",
+}
