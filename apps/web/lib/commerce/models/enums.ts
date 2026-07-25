@@ -1,0 +1,106 @@
+// apps/web/lib/commerce/models/enums.ts
+
+export enum MembershipStatus {
+  PENDING = "PENDING",
+  ACTIVE = "ACTIVE",
+  PAUSED = "PAUSED",
+  EXPIRED = "EXPIRED",
+  RENEWED = "RENEWED",
+  CANCELLED = "CANCELLED",
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = "ACTIVE",
+  PAUSED = "PAUSED",
+  CANCELLED = "CANCELLED",
+  PAST_DUE = "PAST_DUE",
+}
+
+export enum PaymentStatus {
+  CREATED = "CREATED",
+  AUTHORIZED = "AUTHORIZED",
+  CAPTURED = "CAPTURED",
+  SETTLED = "SETTLED",
+  FAILED = "FAILED",
+  REFUNDED = "REFUNDED",
+}
+
+export enum PaymentMethodType {
+  UPI = "UPI",
+  CARD = "CARD",
+  NET_BANKING = "NET_BANKING",
+  WALLET = "WALLET",
+  GATEWAY_CONTAINER = "GATEWAY_CONTAINER",
+}
+
+export enum WalletType {
+  PATIENT = "PATIENT",
+  CORPORATE = "CORPORATE",
+  PROMOTIONAL = "PROMOTIONAL",
+}
+
+export enum WalletTransactionType {
+  CREDIT = "CREDIT",
+  DEBIT = "DEBIT",
+  REFUND_CREDIT = "REFUND_CREDIT",
+  PROMOTIONAL_CASHBACK = "PROMOTIONAL_CASHBACK",
+  REFERRAL_REWARD = "REFERRAL_REWARD",
+}
+
+export enum CouponType {
+  PERCENTAGE = "PERCENTAGE",
+  FLAT_DISCOUNT = "FLAT_DISCOUNT",
+  FREE_HOME_COLLECTION = "FREE_HOME_COLLECTION",
+  MEMBERSHIP_ONLY = "MEMBERSHIP_ONLY",
+}
+
+export enum CouponStatus {
+  ACTIVE = "ACTIVE",
+  EXPIRED = "EXPIRED",
+  MAX_REDEEMED = "MAX_REDEEMED",
+  DISABLED = "DISABLED",
+}
+
+export enum InvoiceStatus {
+  DRAFT = "DRAFT",
+  ISSUED = "ISSUED",
+  PAID = "PAID",
+  PARTIALLY_PAID = "PARTIALLY_PAID",
+  VOID = "VOID",
+  REFUNDED = "REFUNDED",
+}
+
+export enum RefundStatus {
+  REQUESTED = "REQUESTED",
+  PENDING_APPROVAL = "PENDING_APPROVAL",
+  APPROVED = "APPROVED",
+  PROCESSED = "PROCESSED",
+  REJECTED = "REJECTED",
+}
+
+export enum RewardType {
+  REFERRAL_CREDIT = "REFERRAL_CREDIT",
+  CASHBACK = "CASHBACK",
+  PROMO_COUPON = "PROMO_COUPON",
+}
+
+export enum PricingStrategy {
+  STANDARD = "STANDARD",
+  DYNAMIC_SURGE = "DYNAMIC_SURGE",
+  CORPORATE_TIER = "CORPORATE_TIER",
+  MEMBERSHIP_DISCOUNT = "MEMBERSHIP_DISCOUNT",
+}
+
+export enum TaxType {
+  GST = "GST",
+  CGST = "CGST",
+  SGST = "SGST",
+  IGST = "IGST",
+}
+
+export enum RevenueSource {
+  BLOOD_TESTS = "BLOOD_TESTS",
+  IMAGING = "IMAGING",
+  MEMBERSHIP_SUBSCRIPTION = "MEMBERSHIP_SUBSCRIPTION",
+  CORPORATE_BILLING = "CORPORATE_BILLING",
+}
