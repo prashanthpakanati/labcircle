@@ -2,15 +2,18 @@
 
 /**
  * Service layer for Provider Offerings.
- * Contains ALL business logic for creating, updating, archiving, restoring,
- * and deleting Provider Offerings.
+ * Encapsulates domain logic for creating, updating, publishing, archiving, restoring,
+ * and soft-deleting diagnostic service offerings.
  *
- * This class must never be called from UI components directly – only via hooks.
+ * This class must never be imported directly into React components – use hooks instead.
  */
 
 import { collection, doc, getFirestore, serverTimestamp } from "firebase/firestore";
 import { Timestamp } from "firebase/firestore";
-import { ProviderOfferingRepository, OfferingSearchFilters } from "../repositories/ProviderOfferingRepository";
+import {
+  ProviderOfferingRepository,
+  OfferingSearchFilters,
+} from "../repositories/ProviderOfferingRepository";
 import { ProviderOffering, PriceConfiguration } from "../models/types";
 import { ProviderOfferingStatus } from "../models/enums";
 import { ProviderOfferingFormData } from "../models/form";
@@ -26,23 +29,22 @@ import type { DocumentSnapshot } from "firebase/firestore";
 
 /**
  * Application roles used for permission checks.
- * Extend this union as new roles are introduced.
  */
 export type AppRole = "SuperAdmin" | "Admin" | "Editor" | "Viewer";
 
-/** Roles that may publish or archive offerings. */
+/** Roles authorized to publish, archive, or restore offerings. */
 const PUBLISH_ARCHIVE_ROLES: AppRole[] = ["SuperAdmin", "Admin", "Editor"];
 
-/** Roles that may soft‑delete offerings. */
+/** Roles authorized to soft-delete offerings. */
 const DELETE_ROLES: AppRole[] = ["SuperAdmin", "Admin"];
 
 // ---------------------------------------------------------------------------
-// Helper types
+// Helper types & dictionary
 // ---------------------------------------------------------------------------
 
 /**
  * Snapshot of denormalized parent entity fields stored inside each offering
- * to support efficient single‑collection searches.
+ * to support efficient single-collection queries.
  */
 export interface OfferingParentSnapshot {
   providerBrandName: string;
@@ -53,8 +55,26 @@ export interface OfferingParentSnapshot {
   categoryId: string;
 }
 
+/** Dictionary mapping common clinical & diagnostic abbreviations to expansion tokens. */
+const COMMON_ABBREVIATIONS: Record<string, string[]> = {
+  mri: ["magnetic", "resonance", "imaging"],
+  ct: ["computed", "tomography", "scan"],
+  cbct: ["cone", "beam", "computed", "tomography"],
+  usg: ["ultrasound", "ultrasonography", "sonography"],
+  ecg: ["electrocardiogram", "electrocardiography", "ekg"],
+  eeg: ["electroencephalogram", "electroencephalography"],
+  echo: ["echocardiogram", "echocardiography"],
+  xray: ["radiograph", "radiology"],
+  cbc: ["complete", "blood", "count"],
+  lft: ["liver", "function", "test"],
+  kft: ["kidney", "renal", "function", "test"],
+  tft: ["thyroid", "function", "test"],
+  pet: ["positron", "emission", "tomography"],
+  dexa: ["bone", "density", "densitometry"],
+};
+
 // ---------------------------------------------------------------------------
-// Service
+// Service Implementation
 // ---------------------------------------------------------------------------
 
 export class ProviderOfferingService {
@@ -64,13 +84,21 @@ export class ProviderOfferingService {
   // ── Internal helpers ────────────────────────────────────────────────────
 
   /**
-   * Generate Firestore‑safe search keywords from string tokens.
-   * Produces lower‑cased, trimmed, deduplicated tokens suitable for
-   * Firestore `array-contains-any` queries.
-   * Users must never edit this field directly.
+   * Generates Firestore-safe search keywords from parent entity metadata, display names,
+   * codes, categories, and medical abbreviations.
+   *
+   * Normalizes tokens to lowercase, trims whitespace, expands common medical abbreviations,
+   * and deduplicates results. Users must never edit searchKeywords manually.
+   *
+   * @param snapshot - Denormalized parent entity metadata.
+   * @param displayName - Optional display name override.
+   * @returns Array of unique, normalized search keywords.
    */
-  private generateSearchKeywords(snapshot: OfferingParentSnapshot, displayName?: string): string[] {
-    const raw = [
+  public generateSearchKeywords(
+    snapshot: OfferingParentSnapshot,
+    displayName?: string
+  ): string[] {
+    const rawInputs = [
       snapshot.providerBrandName,
       snapshot.providerName,
       snapshot.providerCode,
@@ -78,18 +106,31 @@ export class ProviderOfferingService {
       snapshot.serviceCode,
       snapshot.categoryId,
       displayName ?? "",
-    ]
-      .join(" ")
-      .toLowerCase()
-      .split(/[\s,._/-]+/)
-      .map((t) => t.trim())
-      .filter((t) => t.length >= 2);
+    ];
 
-    return [...new Set(raw)];
+    const tokens: string[] = [];
+
+    for (const input of rawInputs) {
+      if (!input) continue;
+      const parts = input
+        .toLowerCase()
+        .split(/[\s,._/-]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2);
+
+      for (const token of parts) {
+        tokens.push(token);
+        if (COMMON_ABBREVIATIONS[token]) {
+          tokens.push(...COMMON_ABBREVIATIONS[token]);
+        }
+      }
+    }
+
+    return [...new Set(tokens)];
   }
 
   /**
-   * Assert that a user role is authorized for the requested action.
+   * Asserts that a user role is authorized for the requested action.
    * Throws an Error if unauthorized.
    */
   private assertRole(userRole: AppRole, allowedRoles: AppRole[], action: string): void {
@@ -104,19 +145,21 @@ export class ProviderOfferingService {
   // ── Public API ──────────────────────────────────────────────────────────
 
   /**
-   * Fetch a single offering by ID.
-   * Returns null if the offering does not exist or has been soft‑deleted.
+   * Fetches a single Provider Offering by document ID.
+   * Returns null if the offering does not exist or has been soft-deleted.
+   *
+   * @param id - Document ID of the offering.
    */
   async getOffering(id: string): Promise<ProviderOffering | null> {
     return this.repo.getById(id);
   }
 
   /**
-   * Search / list offerings with cursor‑based pagination.
+   * Searches and lists offerings with cursor-based pagination.
    *
-   * @param filters   - Search filters (provider, service, status, price range, etc.)
-   * @param pageSize  - Number of results per page (default 20).
-   * @param cursor    - Firestore DocumentSnapshot cursor for the next page.
+   * @param filters - Search and filter parameters.
+   * @param pageSize - Page size limit (default: 20).
+   * @param cursor - Firestore DocumentSnapshot cursor for pagination.
    */
   async listOfferings(
     filters: OfferingSearchFilters = {},
@@ -127,23 +170,22 @@ export class ProviderOfferingService {
   }
 
   /**
-   * Create a new Provider Offering.
+   * Creates a new Provider Offering in Draft status with version initialized to 1.
    *
    * Validation rules enforced:
-   *  - ProviderLocation and DiagnosticService references are provided (non‑empty).
-   *  - Pricing constraints (mrp >= 0, sellingPrice <= mrp, etc.).
+   *  - providerLocationId and diagnosticServiceId are non-empty.
+   *  - Pricing rules (mrp >= 0, sellingPrice <= mrp, memberPrice/offerPrice constraints).
    *  - Availability consistency (onlineBookable requires enabled = true).
-   *  - No duplicate active offering exists for the same (providerLocationId, diagnosticServiceId) pair.
-   *  - Audit fields are set automatically.
-   *  - searchKeywords are generated automatically.
-   *  - Status defaults to Draft.
+   *  - Duplicate prevention (no existing active offering for providerLocationId + diagnosticServiceId).
+   *  - Version is initialized to 1.
+   *  - searchKeywords are automatically generated.
    *
-   * @param providerLocationId - FK to the parent ProviderLocation.
-   * @param diagnosticServiceId - FK to the DiagnosticService catalog entry.
-   * @param formData - User‑supplied form values.
-   * @param parentSnapshot - Denormalized fields copied from parent entities.
-   * @param userId - UID of the authenticated user performing the action.
-   * @returns The newly created ProviderOffering.
+   * @param providerLocationId - Parent branch location ID.
+   * @param diagnosticServiceId - Catalog service ID.
+   * @param formData - User input form data.
+   * @param parentSnapshot - Denormalized parent metadata.
+   * @param userId - ID of the actor creating the offering.
+   * @returns Newly created ProviderOffering.
    */
   async createOffering(
     providerLocationId: string,
@@ -152,17 +194,14 @@ export class ProviderOfferingService {
     parentSnapshot: OfferingParentSnapshot,
     userId: string
   ): Promise<ProviderOffering> {
-    // 1. Validate FK presence
     if (!providerLocationId?.trim()) throw new Error("providerLocationId is required");
     if (!diagnosticServiceId?.trim()) throw new Error("diagnosticServiceId is required");
 
-    // 2. Validate form data
     const valResult = validateProviderOffering(formData);
     if (!valResult.isValid) {
       throw new Error(`Offering validation failed: ${JSON.stringify(valResult.errors)}`);
     }
 
-    // 3. Duplicate prevention — archived and soft‑deleted offerings are ignored
     const isDuplicate = await this.repo.existsDuplicate(providerLocationId, diagnosticServiceId);
     if (isDuplicate) {
       throw new Error(
@@ -172,17 +211,17 @@ export class ProviderOfferingService {
       );
     }
 
-    // 4. Build entity
     const id = doc(collection(this.db, "provider_offerings")).id;
     const now = serverTimestamp() as unknown as Timestamp;
     const keywords = this.generateSearchKeywords(parentSnapshot, formData.displayNameOverride);
 
     const offering: ProviderOffering = {
       id,
+      version: 1, // Default schema version initialized to 1
       providerLocationId,
       diagnosticServiceId,
       priceConfiguration: { ...formData.priceConfiguration },
-      status: ProviderOfferingStatus.Draft, // always starts as Draft
+      status: ProviderOfferingStatus.Draft, // Always begins in Draft state
       availability: { ...formData.availability },
       homeCollectionSupported: formData.homeCollectionSupported,
       reportTatOverrideHours: formData.reportTatOverrideHours,
@@ -206,19 +245,16 @@ export class ProviderOfferingService {
   }
 
   /**
-   * Update an existing offering.
+   * Updates an existing Provider Offering.
    *
-   * Business rules enforced:
-   *  - Offering must exist and not be soft‑deleted.
-   *  - providerLocationId and diagnosticServiceId are immutable.
-   *  - Status changes are rejected here — use transitionStatus instead.
-   *  - Pricing changes update lastPriceUpdatedAt.
-   *  - searchKeywords are regenerated automatically.
+   * Enforces immutability of FKs and status (status changes must use lifecycle methods).
+   * Updates lastPriceUpdatedAt if pricing changed.
+   * Preserves version number unless explicitly incremented by migration tools.
    *
-   * @param id - Offering document ID.
+   * @param id - Document ID of target offering.
    * @param formData - Updated form values.
-   * @param parentSnapshot - Updated denormalized parent snapshot (pass existing if unchanged).
-   * @param userId - UID of the authenticated user.
+   * @param parentSnapshot - Updated denormalized parent snapshot.
+   * @param userId - ID of actor updating the offering.
    */
   async updateOffering(
     id: string,
@@ -229,7 +265,6 @@ export class ProviderOfferingService {
     const existing = await this.repo.getById(id);
     if (!existing) throw new Error(`Offering '${id}' not found`);
 
-    // Merge and validate pricing
     const mergedPrice: PriceConfiguration = {
       ...existing.priceConfiguration,
       ...(formData.priceConfiguration ?? {}),
@@ -244,7 +279,7 @@ export class ProviderOfferingService {
       notes: formData.notes ?? existing.notes,
       displayOrder: formData.displayOrder ?? existing.displayOrder,
       displayNameOverride: formData.displayNameOverride ?? existing.displayNameOverride,
-      status: existing.status, // status must be changed via transitionStatus
+      status: existing.status,
     };
 
     const valResult = validateProviderOffering(mergedForm);
@@ -252,7 +287,6 @@ export class ProviderOfferingService {
       throw new Error(`Offering validation failed: ${JSON.stringify(valResult.errors)}`);
     }
 
-    // Only update lastPriceUpdatedAt if pricing actually changed
     const priceChanged =
       JSON.stringify(existing.priceConfiguration) !== JSON.stringify(mergedPrice);
 
@@ -264,6 +298,7 @@ export class ProviderOfferingService {
 
     const updated: ProviderOffering = {
       ...existing,
+      version: existing.version ?? 1,
       priceConfiguration: mergedPrice,
       availability: mergedForm.availability,
       homeCollectionSupported: mergedForm.homeCollectionSupported,
@@ -283,17 +318,13 @@ export class ProviderOfferingService {
   }
 
   /**
-   * Transition an offering through its status lifecycle.
+   * Core status lifecycle transition method.
+   * Enforces transition rules (Draft -> Published -> Archived -> Draft) and role authorization.
    *
-   * Allowed transitions:
-   *  Draft → Published (requires PUBLISH_ARCHIVE_ROLES)
-   *  Published → Archived (requires PUBLISH_ARCHIVE_ROLES)
-   *  Archived → Draft    (restore; requires PUBLISH_ARCHIVE_ROLES)
-   *
-   * @param id - Offering document ID.
-   * @param newStatus - Target status.
-   * @param userId - UID of the authenticated user.
-   * @param userRole - Role of the authenticated user.
+   * @param id - Document ID of target offering.
+   * @param newStatus - Desired target status.
+   * @param userId - ID of actor requesting transition.
+   * @param userRole - Role of actor requesting transition.
    */
   async transitionStatus(
     id: string,
@@ -323,29 +354,48 @@ export class ProviderOfferingService {
   }
 
   /**
-   * Archive an offering (convenience wrapper around transitionStatus).
+   * Explicit business method to publish an offering (Draft -> Published).
+   * Calls transitionStatus internally.
+   *
+   * @param id - Offering document ID.
+   * @param userId - User ID of actor.
+   * @param userRole - Role of actor.
+   */
+  async publishOffering(id: string, userId: string, userRole: AppRole): Promise<void> {
+    return this.transitionStatus(id, ProviderOfferingStatus.Published, userId, userRole);
+  }
+
+  /**
+   * Explicit business method to archive an offering (Published -> Archived).
+   * Calls transitionStatus internally.
+   *
+   * @param id - Offering document ID.
+   * @param userId - User ID of actor.
+   * @param userRole - Role of actor.
    */
   async archiveOffering(id: string, userId: string, userRole: AppRole): Promise<void> {
     return this.transitionStatus(id, ProviderOfferingStatus.Archived, userId, userRole);
   }
 
   /**
-   * Restore an archived offering back to Draft status.
+   * Explicit business method to restore an archived offering back to Draft (Archived -> Draft).
+   * Calls transitionStatus internally.
+   *
+   * @param id - Offering document ID.
+   * @param userId - User ID of actor.
+   * @param userRole - Role of actor.
    */
   async restoreOffering(id: string, userId: string, userRole: AppRole): Promise<void> {
     return this.transitionStatus(id, ProviderOfferingStatus.Draft, userId, userRole);
   }
 
   /**
-   * Soft‑delete an offering.
-   * Sets deletedAt and deletedBy; the document remains in Firestore.
-   * Soft‑deleted offerings are excluded from all read operations.
-   *
+   * Soft-deletes a Provider Offering.
    * Requires SuperAdmin or Admin role.
    *
-   * @param id - Offering document ID.
-   * @param userId - UID of the authenticated user.
-   * @param userRole - Role of the authenticated user.
+   * @param id - Document ID of offering to soft-delete.
+   * @param userId - User ID of actor.
+   * @param userRole - Role of actor.
    */
   async deleteOffering(id: string, userId: string, userRole: AppRole): Promise<void> {
     this.assertRole(userRole, DELETE_ROLES, "delete an offering");

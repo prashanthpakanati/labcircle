@@ -36,6 +36,8 @@ export interface Availability {
 export interface ProviderOffering {
   /** Firestore document ID. */
   id: string;
+  /** Schema version for forward compatibility & migration control (defaults to 1). */
+  version: number;
   /** Reference to the parent Provider Location. */
   providerLocationId: string;
   /** Reference to the Diagnostic Service from the catalog. */

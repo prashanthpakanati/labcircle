@@ -32,6 +32,9 @@ const mockRepo = {
   getById: vi.fn().mockResolvedValue(null),
   update: vi.fn().mockResolvedValue(undefined),
   softDelete: vi.fn().mockResolvedValue(undefined),
+  restore: vi.fn().mockResolvedValue(undefined),
+  getByLocation: vi.fn().mockResolvedValue([]),
+  getByDiagnosticService: vi.fn().mockResolvedValue([]),
   existsDuplicate: vi.fn().mockResolvedValue(false),
   search: vi.fn().mockResolvedValue({ offerings: [], nextCursor: undefined }),
 };
@@ -62,7 +65,7 @@ function makeSnapshot(): OfferingParentSnapshot {
     providerBrandName: "Apollo Diagnostics",
     providerName: "Apollo Hospitals Ltd",
     providerCode: "APOLLO",
-    serviceName: "MRI Brain",
+    serviceName: "MRI Brain Scan",
     serviceCode: "MRI-BRAIN-001",
     categoryId: "imaging",
   };
@@ -72,6 +75,7 @@ function makeExisting(overrides: Partial<ProviderOffering> = {}): ProviderOfferi
   const now = Timestamp.now();
   return {
     id: "offer-1",
+    version: 1,
     providerLocationId: "loc-1",
     diagnosticServiceId: "svc-1",
     priceConfiguration: { mrp: 1000, sellingPrice: 800 },
@@ -99,6 +103,11 @@ describe("ProviderOfferingService – createOffering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new ProviderOfferingService();
+  });
+
+  it("initializes entity version to 1", async () => {
+    const result = await service.createOffering("loc-1", "svc-1", makeFormData(), makeSnapshot(), "user-1");
+    expect(result.version).toBe(1);
   });
 
   it("rejects empty providerLocationId", async () => {
@@ -139,11 +148,13 @@ describe("ProviderOfferingService – createOffering", () => {
     expect(result.status).toBe(ProviderOfferingStatus.Draft);
   });
 
-  it("auto-generates searchKeywords (never empty)", async () => {
+  it("auto-generates searchKeywords including abbreviation expansions", async () => {
     const result = await service.createOffering("loc-1", "svc-1", makeFormData(), makeSnapshot(), "user-1");
-    expect(result.searchKeywords.length).toBeGreaterThan(0);
     expect(result.searchKeywords).toContain("apollo");
     expect(result.searchKeywords).toContain("mri");
+    expect(result.searchKeywords).toContain("magnetic");
+    expect(result.searchKeywords).toContain("resonance");
+    expect(result.searchKeywords).toContain("imaging");
   });
 
   it("sets providerBrandName from snapshot", async () => {
@@ -157,9 +168,9 @@ describe("ProviderOfferingService – createOffering", () => {
   });
 });
 
-// ── transitionStatus ──────────────────────────────────────────────────────────
+// ── Keyword Generation ────────────────────────────────────────────────────────
 
-describe("ProviderOfferingService – transitionStatus", () => {
+describe("ProviderOfferingService – generateSearchKeywords", () => {
   let service: InstanceType<typeof ProviderOfferingService>;
 
   beforeEach(() => {
@@ -167,39 +178,72 @@ describe("ProviderOfferingService – transitionStatus", () => {
     service = new ProviderOfferingService();
   });
 
+  it("normalizes to lowercase and removes duplicates", () => {
+    const keywords = service.generateSearchKeywords(
+      {
+        providerBrandName: "Apollo Hospital",
+        providerName: "APOLLO HOSPITALS LTD",
+        providerCode: "APOLLO",
+        serviceName: "CT Scan Head",
+        serviceCode: "CT-HEAD",
+        categoryId: "imaging",
+      },
+      "Apollo CT Scan"
+    );
+
+    expect(keywords).toEqual(keywords.map((k) => k.toLowerCase()));
+    expect(new Set(keywords).size).toBe(keywords.length);
+    // Abbreviation expansion for 'ct'
+    expect(keywords).toContain("computed");
+    expect(keywords).toContain("tomography");
+  });
+});
+
+// ── Service Business Wrappers & Status Transitions ────────────────────────────
+
+describe("ProviderOfferingService – Status Business Wrappers", () => {
+  let service: InstanceType<typeof ProviderOfferingService>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new ProviderOfferingService();
+  });
+
+  it("publishOffering wrapper transitions Draft -> Published", async () => {
+    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Draft }));
+    await service.publishOffering("offer-1", "user-1", "Admin");
+    expect(mockRepo.update).toHaveBeenCalledTimes(1);
+    const updated = mockRepo.update.mock.calls[0][0];
+    expect(updated.status).toBe(ProviderOfferingStatus.Published);
+  });
+
+  it("archiveOffering wrapper transitions Published -> Archived", async () => {
+    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Published }));
+    await service.archiveOffering("offer-1", "user-1", "Editor");
+    expect(mockRepo.update).toHaveBeenCalledTimes(1);
+    const updated = mockRepo.update.mock.calls[0][0];
+    expect(updated.status).toBe(ProviderOfferingStatus.Archived);
+  });
+
+  it("restoreOffering wrapper transitions Archived -> Draft", async () => {
+    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Archived }));
+    await service.restoreOffering("offer-1", "user-1", "SuperAdmin");
+    expect(mockRepo.update).toHaveBeenCalledTimes(1);
+    const updated = mockRepo.update.mock.calls[0][0];
+    expect(updated.status).toBe(ProviderOfferingStatus.Draft);
+  });
+
   it("denies transition for Viewer role", async () => {
     await expect(
-      service.transitionStatus("offer-1", ProviderOfferingStatus.Published, "user-1", "Viewer")
+      service.publishOffering("offer-1", "user-1", "Viewer")
     ).rejects.toThrow("Permission denied");
   });
 
-  it("rejects invalid transition: Draft → Archived", async () => {
+  it("rejects invalid transition: Draft → Archived via wrapper", async () => {
     mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Draft }));
     await expect(
-      service.transitionStatus("offer-1", ProviderOfferingStatus.Archived, "user-1", "Admin")
+      service.archiveOffering("offer-1", "user-1", "Admin")
     ).rejects.toThrow("Invalid status transition");
-  });
-
-  it("allows Draft → Published for Admin", async () => {
-    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Draft }));
-    await expect(
-      service.transitionStatus("offer-1", ProviderOfferingStatus.Published, "user-1", "Admin")
-    ).resolves.not.toThrow();
-    expect(mockRepo.update).toHaveBeenCalledTimes(1);
-  });
-
-  it("allows Published → Archived for Editor", async () => {
-    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Published }));
-    await expect(
-      service.transitionStatus("offer-1", ProviderOfferingStatus.Archived, "user-1", "Editor")
-    ).resolves.not.toThrow();
-  });
-
-  it("allows Archived → Draft (restore)", async () => {
-    mockRepo.getById.mockResolvedValueOnce(makeExisting({ status: ProviderOfferingStatus.Archived }));
-    await expect(
-      service.transitionStatus("offer-1", ProviderOfferingStatus.Draft, "user-1", "SuperAdmin")
-    ).resolves.not.toThrow();
   });
 });
 
@@ -248,14 +292,29 @@ describe("ProviderOfferingService – deleteOffering (soft delete)", () => {
   });
 });
 
-// ── updateOffering – lastPriceUpdatedAt ────────────────────────────────────────
+// ── updateOffering – lastPriceUpdatedAt & version ──────────────────────────────
 
-describe("ProviderOfferingService – updateOffering (lastPriceUpdatedAt)", () => {
+describe("ProviderOfferingService – updateOffering", () => {
   let service: InstanceType<typeof ProviderOfferingService>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     service = new ProviderOfferingService();
+  });
+
+  it("preserves version number during update", async () => {
+    const existing = makeExisting({ version: 2 });
+    mockRepo.getById.mockResolvedValueOnce(existing);
+
+    await service.updateOffering(
+      "offer-1",
+      { notes: "Updated notes" },
+      makeSnapshot(),
+      "user-1"
+    );
+
+    const saved: ProviderOffering = mockRepo.update.mock.calls[0][0];
+    expect(saved.version).toBe(2);
   });
 
   it("does NOT change lastPriceUpdatedAt when price is unchanged", async () => {
@@ -264,13 +323,12 @@ describe("ProviderOfferingService – updateOffering (lastPriceUpdatedAt)", () =
 
     await service.updateOffering(
       "offer-1",
-      { priceConfiguration: { mrp: 1000, sellingPrice: 800 } }, // identical
+      { priceConfiguration: { mrp: 1000, sellingPrice: 800 } },
       makeSnapshot(),
       "user-1"
     );
 
     const saved: ProviderOffering = mockRepo.update.mock.calls[0][0];
-    // lastPriceUpdatedAt should be the original timestamp, unchanged
     expect(saved.lastPriceUpdatedAt.seconds).toBe(existing.lastPriceUpdatedAt.seconds);
   });
 
@@ -280,13 +338,12 @@ describe("ProviderOfferingService – updateOffering (lastPriceUpdatedAt)", () =
 
     await service.updateOffering(
       "offer-1",
-      { priceConfiguration: { mrp: 1000, sellingPrice: 700 } }, // different sellingPrice
+      { priceConfiguration: { mrp: 1000, sellingPrice: 700 } },
       makeSnapshot(),
       "user-1"
     );
 
     const saved: ProviderOffering = mockRepo.update.mock.calls[0][0];
-    // lastPriceUpdatedAt should be defined and truthy (a fresh serverTimestamp)
     expect(saved.lastPriceUpdatedAt).toBeDefined();
     expect(saved.lastPriceUpdatedAt).not.toBeNull();
   });
